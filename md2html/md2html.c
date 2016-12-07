@@ -44,15 +44,19 @@
 # undef _MBCS
 #endif
 #include <tchar.h>
-#define snprintf _snprintf
 
 #else
 
-#define _T(X_)    X_
-#define _TCHAR    char
-#define _tcslen   strlen
-#define _tcschr   strchr
-#define _ftprintf fprintf
+#ifdef MD4C_USE_UTF16
+# error MD4C_USE_UTF16 is only upported on Windows.
+#else
+# define _T(X_)    X_
+# define _TCHAR     char
+# define _tcslen    strlen
+# define _tcschr    strchr
+# define _ftprintf  fprintf
+# define _sntprintf snprintf
+#endif
 
 #endif
 
@@ -83,13 +87,18 @@ struct membuffer {
 static void
 membuf_init(struct membuffer* buf, MD_SIZE new_asize)
 {
-    buf->size = 0;
-    buf->asize = new_asize;
-    buf->data = malloc(new_asize * sizeof buf->data[0]);
-    if(buf->data == NULL) {
+    MD_CHAR *new_data;
+
+    new_data = malloc(new_asize * sizeof buf->data[0]);
+    if(new_data == NULL) {
         fprintf(stderr, "membuf_init: malloc() failed.");
         exit(1);
     }
+
+    buf->asize = new_asize;
+    buf->data  = new_data;
+
+    buf->size = 0;
 }
 
 static void
@@ -102,12 +111,16 @@ membuf_fini(struct membuffer* buf)
 static void
 membuf_grow(struct membuffer* buf, MD_SIZE new_asize)
 {
-    buf->data = realloc(buf->data, new_asize * sizeof buf->data[0]);
-    if(buf->data == NULL) {
+    MD_CHAR *new_data;
+
+    new_data = realloc(buf->data, new_asize * sizeof buf->data[0]);
+    if(new_data == NULL) {
         fprintf(stderr, "membuf_grow: realloc() failed.");
         exit(1);
     }
+
     buf->asize = new_asize;
+    buf->data  = new_data;
 }
 
 static void

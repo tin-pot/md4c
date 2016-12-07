@@ -686,8 +686,8 @@ struct MD_UNICODE_FOLD_INFO_tag {
 
 
 #if defined MD4C_USE_UTF16
-    #define IS_UTF16_SURROGATE_HI(word)     (((WORD)(word) & 0xfc00) == 0xd800)
-    #define IS_UTF16_SURROGATE_LO(word)     (((WORD)(word) & 0xfc00) == 0xdc00)
+    #define IS_UTF16_SURROGATE_HI(word)     (((word) & 0xfc00) == 0xd800)
+    #define IS_UTF16_SURROGATE_LO(word)     (((word) & 0xfc00) == 0xdc00)
     #define UTF16_DECODE_SURROGATE(hi, lo)  (0x10000 + ((((unsigned)(hi) & 0x3ff) << 10) | (((unsigned)(lo) & 0x3ff) << 0)))
 
     static int

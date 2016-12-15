@@ -133,7 +133,7 @@ membuf_append(struct membuffer* buf, const MD_CHAR* data, MD_SIZE size)
 }
 
 #define MEMBUF_APPEND_LITERAL(buf, literal)                             \
-    membuf_append((buf), (literal), sizeof literal/sizeof literal[0])
+    membuf_append((buf), (literal), (sizeof literal/sizeof literal[0])-1U)
 
 #define ISDIGIT(ch)     (_T('0') <= (ch) && (ch) <= _T('9'))
 #define ISLOWER(ch)     (_T('a') <= (ch) && (ch) <= _T('z'))

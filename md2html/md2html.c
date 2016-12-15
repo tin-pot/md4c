@@ -220,26 +220,22 @@ static void
 render_ucs_codepoint(struct membuffer* out, unsigned codepoint)
 {
     unsigned char utf8[4];
-    size_t n;
+    size_t        n = 0U;
 
     if(codepoint <= 0x7f) {
-        n = 1;
-        utf8[0] = codepoint;
+        utf8[n++] = codepoint;
     } else if(codepoint <= 0x7ff) {
-        n = 2;
-        utf8[0] = 0xc0 | ((codepoint >>  6) & 0x1f);
-        utf8[1] = 0x80 + ((codepoint >>  0) & 0x3f);
+        utf8[n++] = 0xc0 | ((codepoint >>  6) & 0x1f);
+        utf8[n++] = 0x80 + ((codepoint >>  0) & 0x3f);
     } else if(codepoint <= 0xffff) {
-        n = 3;
-        utf8[0] = 0xe0 | ((codepoint >> 12) & 0xf);
-        utf8[1] = 0x80 + ((codepoint >>  6) & 0x3f);
-        utf8[2] = 0x80 + ((codepoint >>  0) & 0x3f);
+        utf8[n++] = 0xe0 | ((codepoint >> 12) & 0xf);
+        utf8[n++] = 0x80 + ((codepoint >>  6) & 0x3f);
+        utf8[n++] = 0x80 + ((codepoint >>  0) & 0x3f);
     } else if(codepoint <= 0x10ffff) {
-        n = 4;
-        utf8[0] = 0xf0 | ((codepoint >> 18) & 0x7);
-        utf8[1] = 0x80 + ((codepoint >> 12) & 0x3f);
-        utf8[2] = 0x80 + ((codepoint >>  6) & 0x3f);
-        utf8[3] = 0x80 + ((codepoint >>  0) & 0x3f);
+        utf8[n++] = 0xf0 | ((codepoint >> 18) & 0x7);
+        utf8[n++] = 0x80 + ((codepoint >> 12) & 0x3f);
+        utf8[n++] = 0x80 + ((codepoint >>  6) & 0x3f);
+        utf8[n++] = 0x80 + ((codepoint >>  0) & 0x3f);
     } else 
         render_ucs_codepoint(out, 0xFFFD); /* U+FFFD REPLACEMENT CHARACTER */
 

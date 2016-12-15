@@ -133,7 +133,7 @@ membuf_append(struct membuffer* buf, const MD_CHAR* data, MD_SIZE size)
 }
 
 #define MEMBUF_APPEND_LITERAL(buf, literal)                             \
-    membuf_append((buf), (literal), _tcslen(literal))
+    membuf_append((buf), (literal), sizeof literal/sizeof literal[0])
 
 #define ISDIGIT(ch)     (_T('0') <= (ch) && (ch) <= _T('9'))
 #define ISLOWER(ch)     (_T('a') <= (ch) && (ch) <= _T('z'))
@@ -215,88 +215,6 @@ membuf_append_url_escaped(struct membuffer* buf, const MD_CHAR* data, MD_SIZE si
  ***  HTML rendering helper functions  ***
  *****************************************/
 
-static void
-open_ol_block(struct membuffer* out, const MD_BLOCK_OL_DETAIL* det)
-{
-    MD_CHAR buf[64];
-
-    if(det->start == 1) {
-        MEMBUF_APPEND_LITERAL(out, _T("<ol>"));
-        return;
-    }
-
-    _sntprintf(buf, 64, _T("<ol start=\"%u\">"), det->start);
-    MEMBUF_APPEND_LITERAL(out, buf);
-}
-
-static void
-open_code_block(struct membuffer* out, const MD_BLOCK_CODE_DETAIL* det)
-{
-    MEMBUF_APPEND_LITERAL(out, _T("<pre><code"));
-
-    /* If known, output the HTML 5 attribute class="language-LANGNAME". */
-    if(det->lang.size > 0) {
-        MEMBUF_APPEND_LITERAL(out, _T(" class=\"language-"));
-        membuf_append_escaped(out, det->lang.text, det->lang.size);
-        MEMBUF_APPEND_LITERAL(out, _T("\""));
-    }
-
-    MEMBUF_APPEND_LITERAL(out, _T(">"));
-}
-
-static void
-open_td_block(struct membuffer* out, const MD_CHAR* cell_type, const MD_BLOCK_TD_DETAIL* det)
-{
-    MEMBUF_APPEND_LITERAL(out, _T("<"));
-    MEMBUF_APPEND_LITERAL(out, cell_type);
-
-    switch(det->align) {
-        case MD_ALIGN_LEFT:     MEMBUF_APPEND_LITERAL(out, _T(" align=\"left\">")); break;
-        case MD_ALIGN_CENTER:   MEMBUF_APPEND_LITERAL(out, _T(" align=\"center\">")); break;
-        case MD_ALIGN_RIGHT:    MEMBUF_APPEND_LITERAL(out, _T(" align=\"right\">")); break;
-        default:                MEMBUF_APPEND_LITERAL(out, _T(">")); break;
-    }
-}
-
-static void
-open_a_span(struct membuffer* out, const MD_SPAN_A_DETAIL* det)
-{
-    MEMBUF_APPEND_LITERAL(out, _T("<a href=\""));
-    render_attribute(out, &det->href, membuf_append_url_escaped);
-
-    if(det->title.size > 0) {
-        MEMBUF_APPEND_LITERAL(out, _T("\" title=\""));
-        render_attribute(out, &det->title, membuf_append_escaped);
-    }
-
-    MEMBUF_APPEND_LITERAL(out, _T("\">"));
-}
-
-static void
-open_img_span(struct membuffer* out, const MD_SPAN_IMG_DETAIL* det)
-{
-    MEMBUF_APPEND_LITERAL(out, _T("<img src=\""));
-    membuf_append_url_escaped(out, det->src.text, det->src.size);
-
-    if(det->title.size > 0) {
-        MEMBUF_APPEND_LITERAL(out, _T("\" title=\""));
-        membuf_append_escaped(out, det->title.text, det->title.size);
-    }
-
-    MEMBUF_APPEND_LITERAL(out, _T("\">"));
-}
-
-static unsigned
-hex_val(MD_CHAR ch)
-{
-    if(_T('0') <= ch && ch <= _T('9'))
-        return ch - '0';
-    if(_T('A') <= ch && ch <= _T('Z'))
-        return ch - _T('A') + 10;
-    else
-        return ch - _T('a') + 10;
-}
-
 #ifndef MD4C_USE_UTF16
 static void
 render_ucs_codepoint(struct membuffer* out, unsigned codepoint)
@@ -325,7 +243,7 @@ render_ucs_codepoint(struct membuffer* out, unsigned codepoint)
     } else 
         render_ucs_codepoint(out, 0xFFFD); /* U+FFFD REPLACEMENT CHARACTER */
 
-    membuf_append(out, utf8, n * sizeof utf8[0]);
+    membuf_append(out, utf8, n);
 }
 #else
 static void
@@ -343,9 +261,21 @@ render_ucs_codepoint(struct membuffer* out, unsigned codepoint)
     } else
         utf16[n++] = 0xFFFD; /* U+FFFD REPLACEMENT CHARACTER */
 
-    membuf_append(out, utf16, n * sizeof utf16[0]);
+    membuf_append(out, utf16, n);
 }
 #endif
+
+
+static unsigned
+hex_val(MD_CHAR ch)
+{
+    if(_T('0') <= ch && ch <= _T('9'))
+        return ch - '0';
+    if(_T('A') <= ch && ch <= _T('Z'))
+        return ch - _T('A') + 10;
+    else
+        return ch - _T('a') + 10;
+}
 
 /* Translate entity to its UTF-8 equivalent, or output the verbatim one
  * if such entity is unknown (or if the translation is disabled). */
@@ -396,7 +326,6 @@ render_entity(struct membuffer* out, const MD_CHAR* text, MD_SIZE size,
 
     fn_append(out, text, size);
 }
-
 static void
 render_attribute(struct membuffer* out, const MD_ATTRIBUTE* attr,
                  void (*fn_append)(struct membuffer*,  const MD_CHAR*, MD_SIZE))
@@ -417,42 +346,86 @@ render_attribute(struct membuffer* out, const MD_ATTRIBUTE* attr,
 }
 
 
-static int image_nesting_level = 0;
+static void
+open_ol_block(struct membuffer* out, const MD_BLOCK_OL_DETAIL* det)
+{
+    MD_CHAR buf[64];
+
+    if(det->start == 1) {
+        MEMBUF_APPEND_LITERAL(out, _T("<ol>"));
+        return;
+    }
+
+    _sntprintf(buf, 64, _T("<ol start=\"%u\">"), det->start);
+    MEMBUF_APPEND_LITERAL(out, buf);
+}
+
+static void
+open_code_block(struct membuffer* out, const MD_BLOCK_CODE_DETAIL* det)
+{
+    MEMBUF_APPEND_LITERAL(out, _T("<pre><code"));
+
+    /* If known, output the HTML 5 attribute class="language-LANGNAME". */
+    if(det->lang.size > 0) {
+        MEMBUF_APPEND_LITERAL(out, _T(" class=\"language-"));
+        membuf_append_escaped(out, det->lang.text, det->lang.size);
+        MEMBUF_APPEND_LITERAL(out, _T("\""));
+    }
+
+    MEMBUF_APPEND_LITERAL(out, _T(">"));
+}
+
+static void
+open_td_block(struct membuffer* out, const MD_CHAR* cell_type, const MD_BLOCK_TD_DETAIL* det)
+{
+    MEMBUF_APPEND_LITERAL(out, _T("<"));
+    MEMBUF_APPEND_LITERAL(out, cell_type);
+
+    switch(det->align) {
+        case MD_ALIGN_LEFT:     MEMBUF_APPEND_LITERAL(out, _T(" align=\"left\">")); break;
+        case MD_ALIGN_CENTER:   MEMBUF_APPEND_LITERAL(out, _T(" align=\"center\">")); break;
+        case MD_ALIGN_RIGHT:    MEMBUF_APPEND_LITERAL(out, _T(" align=\"right\">")); break;
+        default:                MEMBUF_APPEND_LITERAL(out, _T(">")); break;
+    }
+}
 
 static void
 open_a_span(struct membuffer* out, const MD_SPAN_A_DETAIL* det)
 {
-    MEMBUF_APPEND_LITERAL(out, "<a href=\"");
+    MEMBUF_APPEND_LITERAL(out, _T("<a href=\""));
     render_attribute(out, &det->href, membuf_append_url_escaped);
 
     if(det->title.text != NULL) {
-        MEMBUF_APPEND_LITERAL(out, "\" title=\"");
+        MEMBUF_APPEND_LITERAL(out, _T("\" title=\""));
         render_attribute(out, &det->title, membuf_append_escaped);
     }
 
-    MEMBUF_APPEND_LITERAL(out, "\">");
+    MEMBUF_APPEND_LITERAL(out, _T("\">"));
 }
+
+static int image_nesting_level = 0;
 
 static void
 open_img_span(struct membuffer* out, const MD_SPAN_IMG_DETAIL* det)
 {
-    MEMBUF_APPEND_LITERAL(out, "<img src=\"");
+    MEMBUF_APPEND_LITERAL(out, _T("<img src=\""));
     render_attribute(out, &det->src, membuf_append_url_escaped);
 
-    MEMBUF_APPEND_LITERAL(out, "\" alt=\"");
+    MEMBUF_APPEND_LITERAL(out, _T("\" alt=\""));
 
     image_nesting_level++;
 }
+
 
 static void
 close_img_span(struct membuffer* out, const MD_SPAN_IMG_DETAIL* det)
 {
     if(det->title.text != NULL) {
-        MEMBUF_APPEND_LITERAL(out, "\" title=\"");
+        MEMBUF_APPEND_LITERAL(out, _T("\" title=\""));
         render_attribute(out, &det->title, membuf_append_escaped);
     }
 
-    MEMBUF_APPEND_LITERAL(out, "\">");
+    MEMBUF_APPEND_LITERAL(out, _T("\">"));
 
     image_nesting_level--;
 }

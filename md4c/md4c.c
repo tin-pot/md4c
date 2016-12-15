@@ -3536,7 +3536,7 @@ md_process_inlines(MD_CTX* ctx, const MD_LINE* lines, SZ n_lines)
             /* Move to next resolved mark. */
             prev_mark = mark;
             mark++;
-            while(!(mark->flags & MD_MARK_RESOLVED))
+            while(!(mark->flags & MD_MARK_RESOLVED)  ||  mark->beg < off)
                 mark++;
         }
 

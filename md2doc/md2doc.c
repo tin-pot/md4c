@@ -2145,8 +2145,10 @@ static int cb_enter_block(MD_BLOCKTYPE type, void *detail, void *userData)
             } else {
                 /*
                  * Ordinary info string.
+                 *
+                 * The HTML `CODE` element has no attribute `info`.
                  */
-                DO_ATTR("info", d->info.text, d->info.size);
+                DO_ATTR("title", d->info.text, d->info.size);
                 DO_ATTR("lang", d->lang.text, d->lang.size);
                 DO_START(NODE_CODE_BLOCK);
                 code_as_markup = false;
@@ -2693,13 +2695,13 @@ int main(int argc, char *argv[])
      * try using the default replacement file given in the
      * environment.
      */
-    if (doing_rast)
+    if (doing_rast) {
 	if (repl_file_count > 0U)
 	    error("Can't use RAST with replacement files.\n");
 	else
 	    /* Do RAST. */
 	    port = generate_rast(outfp, rast_options);
-    else {
+    } else {
 	if (repl_file_count == 0U)
 	    /* Succeed or die. */
 	    load_repl_defs(open_repl_file(NULL, NULL));
@@ -2718,7 +2720,7 @@ int main(int argc, char *argv[])
     }
 
     /*
-     * Loop through the input files.
+     * Loop through the input files. (Obfuscated C ...)
      */
     switch (argc - argi) do {
     default:

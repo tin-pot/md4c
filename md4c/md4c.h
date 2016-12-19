@@ -40,7 +40,7 @@
 #if defined MD4C_USE_UTF16
     #ifdef _WIN32
         #include <wchar.h>
-        typedef WCHAR       MD_CHAR;
+        typedef wchar_t MD_CHAR;
     #else
         #error MD4C_USE_UTF16 is only upported on Windows.
     #endif

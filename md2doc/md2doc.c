@@ -1,10 +1,10 @@
-/*== cm2doc.c =========================================================*
+/*== md2doc.c =========================================================*
 
 NAME
-    cm2doc - CommonMark to document processor
+    md2doc - CommonMark to document processor
 
 SYNOPSIS
-    cm2doc [ --version ] [ -h | --help ]
+    md2doc [ --version ] [ -h | --help ]
            [ --rast | { ( --repl | -r ) replfile } ]
            [ (--title | -t) string]
            [ (--css | -c) url]
@@ -13,16 +13,16 @@ SYNOPSIS
            file ...
 
 DESCRIPTION
-	A CommonMark parser based on `cmark` which produces output
+	A CommonMark parser based on `md4c` which produces output
 	documents controlled by "replacement files".
 
 OPTIONS
     --version
-        Displays `cmark` version and copyright information and exits.
+        Displays `md4c` version and copyright information and exits.
         
     --help
     -h
-	Displays `cm2doc` usage information and diplays which 
+	Displays `md2doc` usage information and diplays which 
 	environment variables are accessed.
     
     --rast
@@ -52,25 +52,6 @@ OPTIONS
     -c
 	Specifies a CSS style file (`CM.css`).
 
-    --sourcepos
-        Includes source position information in CommonMark elements.
-        
-    --hardbreaks
-        Treats line breaks in input as "hard" line breaks.
-        
-    --smart
-        Uses smart punctuation for quotation marks, dashes, and 
-        ellipsis.
-        
-    --safe
-        Suppresses rendering of raw HTML.
-        
-    --normalize
-        Joins adjacent text nodes in the generated element structure.
-        
-    --validate-utf8
-        Checks and sanitizes UTF-8 encoding of input files.
-        
 ENVIRONMENT
     DIGRAPHS
         Names the default "digraph file".
@@ -84,14 +65,14 @@ ENVIRONMENT
         
 BUGS
     Certainly many. Please report bugs and issues on the GitHub
-    page for this project, <https://github.com/tin-pot/cmark>.
+    page for this project, <https://github.com/tin-pot/md4c>.
 
 
 ------------------------------------------------------------------------
 
 COPYRIGHT NOTICE AND LICENSE
 
-Copyright (C) 2015 Martin Hofmann <mh@tin-pot.net>
+Copyright (C) 2016 Martin Hofmann <mh@tin-pot.net>
 
 Redistribution and use in source and binary forms, with or without 
 modification, are permitted provided that the following conditions 
@@ -138,19 +119,16 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 
 #include "octetbuf.h"
 #include "escape.h"
+#define U8_NAMES U8_X_FOR_U
 #include "xchar.h" /* Unicode utilities - UTF-8 conversion. */
 
 /*
  * CommonMark library
  */
-#define CMARK_NO_SHORT_NAMES 1
-#include "config.h"
-#include "cmark.h"
-#include "cmark_ctype.h"
-#include "node.h"
-#include "buffer.h"
-#include "houdini.h"
+#include "md4c.h"
 
+static char md4c_version_string[32];	/* Initialized in main(). */
+#define MD4C_VERSION_STRING md4c_version_string
 
 #define NUL  0
 
@@ -163,6 +141,30 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 void error(const char *msg, ...);
 void syntax_error(const char *msg, ...);
 
+enum node_type {
+    NODE_NONE,
+    NODE_DOCUMENT,
+    NODE_BLOCKQUOTE,
+    NODE_LIST,
+    NODE_LISTITEM,
+    NODE_CODE_BLOCK,
+    NODE_HTML_BLOCK,
+    NODE_CUSTOM_BLOCK,
+    NODE_PARA,
+    NODE_HEADING,
+    NODE_HRULE,
+    NODE_TEXT,
+    NODE_SOFTBREAK,
+    NODE_LINEBREAK,
+    NODE_CODE_INLINE,
+    NODE_HTML_INLINE,
+    NODE_CUSTOM_INLINE,
+    NODE_EMPH,
+    NODE_STRONG,
+    NODE_LINK,
+    NODE_IMAGE,
+    NODE_MARKUP
+};
 
 /*== ESIS API ========================================================*/
 
@@ -190,9 +192,9 @@ typedef void *ESIS_UserData;
 
 typedef void (ESIS_Attr)(ESIS_UserData,    const char *name,
                                            const char *val, size_t);
-typedef void (ESIS_Start)(ESIS_UserData,               cmark_node_type);
+typedef void (ESIS_Start)(ESIS_UserData,               enum node_type);
 typedef void (ESIS_Cdata)(ESIS_UserData,   const char *cdata, size_t);
-typedef void (ESIS_End)(ESIS_UserData,                 cmark_node_type);
+typedef void (ESIS_End)(ESIS_UserData,                 enum node_type);
 
 typedef struct ESIS_CB_ {
     ESIS_Attr	 *attr;
@@ -214,11 +216,6 @@ typedef struct ESIS_Port_ {
  *  - ESIS filters.
  */
  
-int        parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t,
-                                                    const char *meta[]);
-                                   
-int        parse_esis(FILE *from, ESIS_Port *to, unsigned options);
-
 ESIS_Port* generate_repl(FILE *to,               unsigned options);
 ESIS_Port* generate_rast(FILE *to,               unsigned options);
 ESIS_Port* generate_esis(FILE *to,               unsigned options);
@@ -253,11 +250,11 @@ ESIS_Port* filter_toc(ESIS_Port*to,              unsigned options);
  */
  
 #if WITH_GITIDENT
-extern const char cmark_gitident[];
-extern const char cmark_repourl[];
+extern const char md4c_gitident[];
+extern const char md4c_repourl[];
 #else
-static const char cmark_gitident[] = "n/a";
-static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
+static const char md4c_gitident[] = "n/a";
+static const char md4c_repourl[]  = "https://github.com/tin-pot/md4c";
 #endif
 
 /*
@@ -267,7 +264,7 @@ static const char cmark_repourl[]  = "https://github.com/tin-pot/cmark";
  *
  * At compile time, these names are accessible through META_... macros.
  *
- * NOTE: We use a "pseudo-namespace" for "cm2doc" (and "cmark")
+ * NOTE: We use a "pseudo-namespace" for "md2doc" (and CommonMark)
  * specific "pseudo-attributes", to avoid any conflict with real
  * attributes in a document type.
  *
@@ -348,12 +345,12 @@ static char default_creator[81] = "N.N.";
 #define ISUCNMCHAR(C) ( ISUCNMSTRT(C) || (C) == '-' || (C) == '.' )
 #define ISLCNMCHAR(C) ( ISLCNMSTRT(C) || (C) == '-' || (C) == '.' )
 
+
 /* How many node types there are, and what the name length limit is. */
-#define NODE_NUM       (CMARK_NODE_LAST_INLINE+2)
-#define NODE_MARKUP    (CMARK_NODE_LAST_INLINE+1)
+#define NODE_NUM       (NODE_MARKUP + 1)
 #define NODENAME_LEN    NAMELEN
 
-static const char* const nodename[NODE_NUM+1] = {
+static const char* const nodename[NODE_NUM] = {
      NULL,	/* The "none" type (enum const 0) is invalid! */
    /*12345678*/
     "CM.DOC",
@@ -509,10 +506,10 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 #define ETAG_BOL_START  0x0040
 #define ETAG_BOL_END    0x0080
 
-typedef size_t textidx_t;  /* Index into cmark_strbuf text_buf. */
+typedef size_t textidx_t;  /* Index into `text_buf` below. */
 
 struct taginfo_ {
-    cmark_node_type nt;
+    enum node_type nt;
     textidx_t	    atts[2*ATTCNT + 2];
 };
 
@@ -704,7 +701,7 @@ void set_repl(struct taginfo_ *pti,
               const char *repl_text[2],
               bool is_cdata)
 {
-    cmark_node_type nt = pti->nt;
+    enum node_type nt = pti->nt;
     struct repl_ *rp = malloc(sizeof *rp);
     
     assert(0 <= nt);
@@ -793,7 +790,7 @@ void put_repl(const char *repl)
     }
 }
 
-struct repl_ *select_rule(cmark_node_type nt)
+struct repl_ *select_rule(enum node_type nt)
 {
     struct repl_ *rp;
     
@@ -887,7 +884,7 @@ void repl_Attr(ESIS_UserData ud,
     push_att(name, val, len);
 }
 
-void repl_Start(ESIS_UserData ud, cmark_node_type nt)
+void repl_Start(ESIS_UserData ud, enum node_type nt)
 {
     const struct repl_ *rp = NULL;
     
@@ -898,7 +895,7 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
      * substituted "start string".
      */
      
-    if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
+    if (nt != NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[0] != NULL) {
 	    put_repl(rp->repl[0]);
 	} 
@@ -910,8 +907,8 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
      */
      
     is_cdata = (rp != NULL && rp->is_cdata) ||
-               (nt == CMARK_NODE_HTML_BLOCK) ||
-               (nt == CMARK_NODE_HTML_INLINE);
+               (nt == NODE_HTML_BLOCK) ||
+               (nt == NODE_HTML_INLINE);
     
     /*
      * If no matching definition was found, or no start string was
@@ -926,14 +923,29 @@ void repl_Start(ESIS_UserData ud, cmark_node_type nt)
      */ 
 }
 
+void houdini_escape(octetbuf *pbuf, const char *cdata, size_t len,
+        unsigned options)
+{
+    size_t k;
+    
+    for (k = 0U; k < len; ++k) {
+        int c;
+        
+        switch ((c = cdata[k])) {
+        case '"': octetbuf_push_back(pbuf, "&quot;", 6U); break;
+        case '&': octetbuf_push_back(pbuf, "&amp;",  5U); break;
+        case '<': octetbuf_push_back(pbuf, "&lt;",   4U); break;
+        default:  octetbuf_push_c(pbuf, c);
+        }
+    }
+}
 
 void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 {
-    static cmark_mem stdmem          = { calloc, realloc, free };
-    static cmark_strbuf houdini      = { 0 };
-    static int          houdini_init = 0;
+    static octetbuf houdini      = { 0 };
+    static int      houdini_init = 0;
     
-    const cmark_node_type nt = current_nt();
+    const enum node_type nt = current_nt();
     size_t      k;
     const char *p;
     
@@ -950,7 +962,7 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
          */
          
 	if (!houdini_init) {
-	    cmark_strbuf_init(&stdmem, &houdini, 1024);
+	    octetbuf_reserve(&houdini, 1024U);
 	    houdini_init = 1;
 	}
 
@@ -960,9 +972,9 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
 	 * as the SGML NET.
 	 */
 	
-	houdini_escape_html0(&houdini, (uint8_t*)cdata, len, 0);
-	p   = cmark_strbuf_cstr(&houdini);
-	len = cmark_strbuf_len(&houdini);
+	houdini_escape(&houdini, cdata, len, 0U);
+	p   = octetbuf_begin(&houdini);
+	len = octetbuf_size(&houdini);
     }
 
     /*
@@ -974,14 +986,14 @@ void repl_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     for (k = 0U; k < len; ++k)
         PUTC(p[k]);
 	
-    cmark_strbuf_clear(&houdini);
+    octetbuf_clear(&houdini);
 }
 
-void repl_End(ESIS_UserData ud, cmark_node_type nt)
+void repl_End(ESIS_UserData ud, enum node_type nt)
 {
     const struct repl_ *rp = repl_tab[nt];
     
-    if (nt != CMARK_NODE_NONE && (rp = select_rule(nt)) != NULL) {
+    if (nt != NODE_NONE && (rp = select_rule(nt)) != NULL) {
 	if (rp->repl[1] != NULL) {
 	    put_repl(rp->repl[1]);
 	}
@@ -1118,7 +1130,7 @@ void rast_Attr(ESIS_UserData ud, const char *name, const char *val, size_t len)
     return;
 }
 
-void rast_Start(ESIS_UserData ud, cmark_node_type nt)
+void rast_Start(ESIS_UserData ud, enum node_type nt)
 {
     struct RAST_Param_* rastp = ud;
     FILE *fp = rastp->outfp;
@@ -1159,7 +1171,7 @@ void rast_Cdata(ESIS_UserData ud, const char *cdata, size_t len)
     rast_data(fp, cdata, len, '|');
 }
 
-void rast_End(ESIS_UserData ud, cmark_node_type nt)
+void rast_End(ESIS_UserData ud, enum node_type nt)
 {
     struct RAST_Param_* rastp = ud;
     FILE *fp = rastp->outfp;
@@ -1243,6 +1255,7 @@ static int infosplit(struct infosplit *ps, const char *s, size_t n)
     return found && !suppress;
 }
 
+#if 0
 static int S_render_node_esis(cmark_node *node,
                               cmark_event_type ev_type,
                               ESIS_Port *to)
@@ -1262,12 +1275,12 @@ static int S_render_node_esis(cmark_node *node,
     }
     
     switch (node->type) {
-    case CMARK_NODE_TEXT:
-    case CMARK_NODE_HTML_BLOCK:
-    case CMARK_NODE_HTML_INLINE:
-	if (node->type != CMARK_NODE_TEXT) {
+    case NODE_TEXT:
+    case NODE_HTML_BLOCK:
+    case NODE_HTML_INLINE:
+	if (node->type != NODE_TEXT) {
 	    DO_ATTR("type", "HTML", NTS);
-	    DO_ATTR("display", node->type == CMARK_NODE_HTML_BLOCK ? 
+	    DO_ATTR("display", node->type == NODE_HTML_BLOCK ? 
 		    "block" : "inline", NTS);
 	}
 	DO_START(node->type);
@@ -1275,7 +1288,7 @@ static int S_render_node_esis(cmark_node *node,
 	DO_END(node->type);
 	break;
 
-    case CMARK_NODE_LIST:
+    case NODE_LIST:
 	switch (cmark_node_get_list_type(node)) {
 	case CMARK_ORDERED_LIST:
 	    DO_ATTR("type", "ordered", NTS); 
@@ -1296,14 +1309,14 @@ static int S_render_node_esis(cmark_node *node,
 	DO_START(node->type);
 	break;
 
-    case CMARK_NODE_HEADING:
+    case NODE_HEADING:
 	sprintf(buffer, "%d", node->as.heading.level);
 	DO_ATTR("level", buffer, NTS);
 	DO_START(node->type);
 	break;
 
-    case CMARK_NODE_CODE:
-    case CMARK_NODE_CODE_BLOCK:
+    case NODE_CODE:
+    case NODE_CODE_BLOCK:
 	/*
 	 * If the info string (for code block) rsp the data string (for
 	 * inline code) has the form:
@@ -1324,7 +1337,7 @@ static int S_render_node_esis(cmark_node *node,
 	    struct infosplit   split;
 	    const char        *info, *data;
 	    size_t             ilen,  dlen;
-	    const bool         is_inline = (nt == CMARK_NODE_CODE);
+	    const bool         is_inline = (nt == NODE_CODE);
 
 	    info = node->as.code.info.data;
 	    ilen = node->as.code.info.len;
@@ -1370,8 +1383,8 @@ static int S_render_node_esis(cmark_node *node,
 	}
 	break;
 
-    case CMARK_NODE_LINK:
-    case CMARK_NODE_IMAGE:
+    case NODE_LINK:
+    case NODE_IMAGE:
 	DO_ATTR("destination",
 	    node->as.link.url.data, node->as.link.url.len);
 	DO_ATTR("title", node->as.link.title.data,
@@ -1379,14 +1392,14 @@ static int S_render_node_esis(cmark_node *node,
 	DO_START(node->type);
 	break;
 
-    case CMARK_NODE_HRULE:
-    case CMARK_NODE_SOFTBREAK:
-    case CMARK_NODE_LINEBREAK:
+    case NODE_HRULE:
+    case NODE_SOFTBREAK:
+    case NODE_LINEBREAK:
 	DO_START(node->type);
 	DO_END(node->type);
 	break;
 
-    case CMARK_NODE_DOCUMENT:
+    case NODE_DOCUMENT:
     default:
 	DO_START(node->type);
 	break;
@@ -1394,7 +1407,9 @@ static int S_render_node_esis(cmark_node *node,
 
     return 1;
 }
+#endif /* 0 */
 
+#if 0
 char *cmark_render_esis(cmark_node *root, ESIS_Port *to)
 {
   cmark_event_type ev_type;
@@ -1408,6 +1423,7 @@ char *cmark_render_esis(cmark_node *root, ESIS_Port *to)
   cmark_iter_free(iter);
   return NULL;
 }
+#endif /* 0 */
 
 
 /*====================================================================*/
@@ -1441,11 +1457,11 @@ size_t do_meta_lines(char *buffer, size_t nbuf, const ESIS_Port *to)
 		     "            date: %s;\n"
 		     "            id: %s\n"
 		     "        ",
-	    cmark_repourl,
+	    md4c_repourl,
 	    __DATE__ ", " __TIME__,
-	    cmark_gitident);
+	    md4c_gitident);
     DO_ATTR("CM.doc.v", version, NTS);
-    DO_ATTR("CM.ver", CMARK_VERSION_STRING, NTS);
+    DO_ATTR("CM.ver", MD4C_VERSION_STRING, NTS);
 		
     for (ibol = 0U; buffer[ibol] == '%'; ) {
 	size_t len;
@@ -1826,10 +1842,10 @@ int P_repl_text_pair(int ch, char *repl_text[2])
 }
 
 
-int P_name(int ch, cmark_node_type *pnt, char name[NAMELEN+1], bool fold)
+int P_name(int ch, enum node_type *pnt, char name[NAMELEN+1], bool fold)
 {
     char *p = name;
-    cmark_node_type nt;
+    enum node_type nt;
     
     assert(ISNMSTART(ch));
     
@@ -1900,7 +1916,7 @@ int P_rni_name(int ch, enum rn_ *prn, char name[NAMELEN+1])
 int P_sel(int ch, struct taginfo_ taginfo[1])
 {
     char name[NAMELEN+1];
-    cmark_node_type nt;
+    enum node_type nt;
     const int fold = 1;
     unsigned nattr = 0U;
     
@@ -1910,7 +1926,7 @@ int P_sel(int ch, struct taginfo_ taginfo[1])
     taginfo->nt = nt;
     
     while (ch == '[') {
-	bufsize_t name_idx = 0, val_idx = 0;
+	size_t name_idx = 0, val_idx = 0;
 	
 	ch = GETC(ch);
         P_S(ch);
@@ -2228,6 +2244,50 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 /*====================================================================*/
 
 /*
+ * renderer -- MD4C renderer pushing into ESIS_port.
+ */
+
+static int cb_enter_block(MD_BLOCKTYPE type, void *detail, void *userData)
+{
+    return 0;
+}
+
+static int cb_leave_block(MD_BLOCKTYPE type, void *detail, void *userData)
+{
+    return 0;
+}
+
+static int cb_enter_span(MD_SPANTYPE type, void *detail, void *userData)
+{
+    return 0;
+}
+
+static int cb_leave_span(MD_SPANTYPE type, void *detail, void *userData)
+{
+    return 0;
+}
+
+static int cb_text(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *userData)
+{
+    return 0;
+}
+
+static void cb_debug_log(const char *msg, void *userData)
+{
+    return;
+}
+
+static MD_RENDERER renderer = {
+    cb_enter_block,
+    cb_leave_block,
+    cb_enter_span,
+    cb_leave_span,
+    cb_text,
+    cb_debug_log,
+    0U
+};
+
+/*
  * gen_document -- Driver for the replacement backend
  *
  *  1. Start the outermost "universal" pseudo-element.
@@ -2238,28 +2298,29 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
  *  6. [Not needed]: Clean up the attribute stack.
  */
  
-static void gen_document(cmark_node *document,
-                         cmark_option_t options,
+static void gen_document(const octetbuf *text,
+                         unsigned options,
                          ESIS_Port *to)
 {
     const ESIS_CB *esis_cb = to->cb;
     ESIS_UserData  esis_ud = to->ud;
     int bol[2];
-    const cmark_node_type none = CMARK_NODE_NONE;
     
-    DO_START(CMARK_NODE_NONE);
+    DO_START(NODE_NONE);
     bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL) {
 	put_repl(rn_repl[RN_PROLOG]);
     }
 
-    cmark_render_esis(document, to);
+    renderer.flags = options;
+    md_parse(octetbuf_begin(text), octetbuf_size(text),
+            &renderer, to);
 
     if (rn_repl[RN_EPILOG] != NULL) {
 	put_repl(rn_repl[RN_EPILOG]);
     }
-    DO_END(CMARK_NODE_NONE);
+    DO_END(NODE_NONE);
 }
 
 
@@ -2340,21 +2401,17 @@ size_t prep(char *p, size_t n, FILE *fp)
 
 /*====================================================================*/
 
-int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
+int process_file(FILE *from, ESIS_Port *to, unsigned options,
                                                      const char *meta[])
 {
-    static cmark_parser *parser = NULL;
-    
     static bool in_header = true;
-    static char buffer[8*BUFSIZ];
+    static char buffer[BUFSIZ];
+    octetbuf text = { 0 };
     
     size_t bytes;
     
-    if (parser == NULL)
-	parser = cmark_parser_new(options);
-    
     if (from != NULL)
-	while ((bytes = prep(buffer, sizeof buffer,from)) > 0) {
+	while ((bytes = prep(buffer, sizeof buffer, from)) > 0U) {
 	    /*
 	     * Read and parse the input file block by block.
 	     */
@@ -2381,25 +2438,21 @@ int parse_cmark(FILE *from, ESIS_Port *to, cmark_option_t options,
 
 	    assert(hbytes <= bytes);
 	    
-	    if (hbytes < bytes)
-		cmark_parser_feed(parser, buffer + hbytes, 
-		                                        bytes - hbytes);
-	    else
+	    if (hbytes < bytes) {
+	        octetbuf_push_back(&text,
+	                buffer + hbytes, bytes - hbytes);
+	    } else {
 		break;
+	    }
 	}
     else {
 	/*
 	 * Finished parsing, generate document content into
 	 * ESIS port.
 	 */
-        cmark_node   *document;
         
-	document = cmark_parser_finish(parser);
-	cmark_parser_free(parser); parser = NULL;
-
-	gen_document(document, options, to);
-
-	cmark_node_free(document);
+        
+        gen_document(&text, options, to);
     }
     
     return 0;
@@ -2411,7 +2464,7 @@ void usage()
 {
     const char *dgrfile = getenv(DIGRAPH_VAR);
     
-    printf("Usage:   cm2doc [FILE*]\n\n");
+    printf("Usage:   md2doc [FILE*]\n\n");
     printf("Options:\n");
     printf("  -t --title TITLE Set the document title\n");
     printf("  -c --css CSS     Set the document style sheet to CSS\n");
@@ -2448,10 +2501,10 @@ int main(int argc, char *argv[])
     const char *css_arg          = NULL;
     const char *dgr_arg          = NULL;
 
-    cmark_option_t cmark_options = CMARK_OPT_NORMALIZE;
-    unsigned       rast_options  = 0U;
-    bool doing_rast              = false;
-    unsigned repl_file_count     = 0U;
+    unsigned    rast_options     = 0U;
+    unsigned    parser_options   = 0U;
+    bool        doing_rast       = false;
+    unsigned    repl_file_count  = 0U;
     
     ESIS_Port *port   = NULL;
     FILE      *infp   = stdin;
@@ -2462,6 +2515,8 @@ int main(int argc, char *argv[])
     time_t now;
     int argi;
     
+    sprintf(md4c_version_string, "%d.%d.%d",
+            MD_VERSION_MAJOR, MD_VERSION_MINOR, MD_VERSION_RELEASE);
     meta[0] = NULL;
     
     if ( (username = getenv("LOGNAME"))   != NULL ||
@@ -2474,10 +2529,10 @@ int main(int argc, char *argv[])
 	    
     for (argi = 1; argi < argc && argv[argi][0] == '-'; ++argi) {
 	if (strcmp(argv[argi], "--version") == 0) {
-	    printf("cmark %s", CMARK_VERSION_STRING);
-	    printf(" ( %s %s )\n", cmark_repourl, cmark_gitident);
-	    printf(" cmark:  (C) 2014, 2015 John MacFarlane\n");
-	    printf(" cm2doc: (C) 2016 M. Hofmann\n");
+	    printf("md4c %s\n", MD4C_VERSION_STRING);
+	    printf(" ( %s %s )\n", md4c_repourl, md4c_gitident);
+	    printf(" md4c: Copyright (c) 2016 Martin Mitas\n");
+	    printf(" md2doc: Copyright (c) 2016 M. Hofmann\n");
 	    exit(EXIT_SUCCESS);
 	} else if ((strcmp(argv[argi], "--repl") == 0) ||
 	    (strcmp(argv[argi], "-r") == 0)) {
@@ -2498,18 +2553,18 @@ int main(int argc, char *argv[])
 	} else if ((strcmp(argv[argi], "--digr") == 0) ||
 	    (strcmp(argv[argi], "-d") == 0)) {
 		dgr_arg = argv[++argi];
-	} else if (strcmp(argv[argi], "--sourcepos") == 0) {
-	    cmark_options |= CMARK_OPT_SOURCEPOS;
-	} else if (strcmp(argv[argi], "--hardbreaks") == 0) {
-	    cmark_options |= CMARK_OPT_HARDBREAKS;
-	} else if (strcmp(argv[argi], "--smart") == 0) {
-	    cmark_options |= CMARK_OPT_SMART;
-	} else if (strcmp(argv[argi], "--safe") == 0) {
-	    cmark_options |= CMARK_OPT_SAFE;
-	} else if (strcmp(argv[argi], "--normalize") == 0) {
-	    cmark_options |= CMARK_OPT_NORMALIZE;
-	} else if (strcmp(argv[argi], "--validate-utf8") == 0) {
-	    cmark_options |= CMARK_OPT_VALIDATE_UTF8;
+        /*
+         * TODO: CM4C-specific options, all end up in bitset
+         * `parser_flags`, except 'verbatim-entites', which is 
+         * for the renderer and set in `renderer_flags`.
+         *
+         * -   verbatim-entities
+         * -   permissive-...
+         * -   no-indented-code
+         * -   no-html...
+         * -   collapse-whitespace
+         * -   tables
+         */
 	} else if ((strcmp(argv[argi], "--help") == 0) ||
 	    (strcmp(argv[argi], "-h") == 0)) {
 		usage();
@@ -2573,14 +2628,14 @@ int main(int argc, char *argv[])
      */
     switch (argc - argi) do {
     default:
-	if ((outfp = freopen(argv[argi], "r", stdin)) == NULL)
+	if ((infp = freopen(argv[argi], "r", stdin)) == NULL)
 	    error("Can't open \"%s\": %s\n", argv[argi],
 	                                               strerror(errno));
     case 0:
-	parse_cmark(outfp, port, cmark_options, meta);
+	process_file(infp, port, parser_options, meta);
     } while (++argi < argc);
     
-    parse_cmark(NULL, port, 0U, NULL);
+    process_file(NULL, port, 0U, NULL);
 
 
     return EXIT_SUCCESS;

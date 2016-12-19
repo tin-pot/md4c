@@ -20,6 +20,7 @@
 #include <string.h>
 #include <stdint.h>
 
+#define U8_NAMES U8_X_FOR_U
 #include "xchar.h"
 
 #include "octetbuf.h"

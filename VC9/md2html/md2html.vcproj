@@ -42,7 +42,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="0"
 				AdditionalIncludeDirectories="$(SolutionDir)..\md4c"
-				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE"
+				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;MD4_USE_UTF16"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
 				RuntimeLibrary="3"
@@ -186,6 +186,10 @@
 				RelativePath="..\..\md2html\md2html.c"
 				>
 			</File>
+			<File
+				RelativePath="..\..\md2html\render_html.c"
+				>
+			</File>
 		</Filter>
 		<Filter
 			Name="Headerdateien"
@@ -198,6 +202,10 @@
 			</File>
 			<File
 				RelativePath="..\..\md2html\entity.h"
+				>
+			</File>
+			<File
+				RelativePath="..\..\md2html\render_html.h"
 				>
 			</File>
 		</Filter>

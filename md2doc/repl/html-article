@@ -1,0 +1,250 @@
+/*===== html-article ===================================================
+
+        html-article: Article template with Dublin Core metadata.
+
+Result document type:
+
+    DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN"
+
+CommonMark node types:
+
+ 1. Block:
+	CM.DOC	    CM.QUO-B    CM.LIST	    CM.LI
+	CM.COD-B    CM.HTM-B	CM.PAR	    CM.HDR
+	CM.HR		
+  
+ 2. Inline 
+	CM.TXT	    CM.SF-BR 	CM.LN-BR    CM.COD
+	CM.EMPH	    CM.STRN	CM.LNK	
+	CM.IMG	    CM.HTM
+  
+ 3. Special
+	MARKUP
+
+======================================================================*/
+
+/*===== PROLOG =======================================================*/
+
+@prolog
+{<!DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN">
+<HTML>
+ <HEAD profile="http://dublincore.org/documents/2008/08/04/dc-html/">
+ <META http-equiv="Content-Type" content="text/html; charset=UTF-8">
+
+ <LINK rel="schema.DC"      href="http://purl.org/dc/elements/1.1/">
+ <LINK rel="schema.DCTERMS" href="http://purl.org/dc/terms/">
+
+ <META name="DC.format"  content="text/html" scheme="DCTERMS.IMT">
+ <META name="DC.type"    content="Text" scheme="DCTERMS.DCMIType">
+ <META name="DC.title"   lang="$:lang" content=
+
+     "$:DC.title"
+
+     >
+ <META name="DC.creator"      content="$:DC.creator">
+ <META name="DC.date"         content="$:DC.date">
+ <META name="DC.language"     content="$:lang">
+ <META name="DCTERMS.rights"  content=
+
+     "© Martin Hofmann <mh@tin-pot.net>. All rights reserved."
+
+     >
+ <META name="DCTERMS.license" content=
+
+	   "Creative Commons Attribution-ShareAlike 4.0
+		 International Public License
+		 (CC BY-SA 4.0 International)"
+     >
+
+ <LINK rel="stylesheet"       type="text/css" href="$:CM.css">
+ <META name="GENERATOR"       content=
+     "cm2doc (
+         $:CM.doc.v
+     )">
+
+ <TITLE>$:DC.title</TITLE>} +
+
+/*===== EPILOG =======================================================*/
+
+/* HTML epilog: </HTML> is required. */
+
+@epilog + 
+{<HR>
+<DIV class="badges">
+<TABLE summary="Badges and Copyright"><TBODY>
+<TR>
+  <TD><A href="http://validator.w3.org/check?uri=referer">
+     <IMG src="http://validator.w3.org/images/v15445"
+          alt="Valid ISO/IEC 15445:2000"></A>
+  <TD><A href="http://www.iso.org/iso/catalogue_detail.htm?csnumber=27688"
+      >ISO/IEC 15445:2000</A><BR><A
+         href="https://www.cs.tcd.ie/misc/15445/15445.html"
+      >HTML</A> by <A
+         href="https://github.com/tin-pot/cmark/tree/master/cm2doc"
+      ><EM>cm2doc</EM></A>
+  <TD>&emsp;
+    <A href="http://www.tin-pot.net">
+      <IMG src="http://www.tin-pot.net/logo_48.png"
+           alt="tin-pot Logo"></A>
+  <TD>&copy; 2015 <A href="mailto:mh@tin-pot.net"
+      ><EM>tin-pot.net</EM></A>&emsp;
+  <TD>
+     <A href="http://creativecommons.org/licenses/by-sa/4.0/">
+     <IMG src=
+"http://mirrors.creativecommons.org/presskit/buttons/88x31/svg/by-sa.svg"
+          alt="CC BY-SA 4.0 licenced"></A>
+  <TD><A href="http://creativecommons.org/licenses/by-sa/4.0/legalcode"
+      >CC BY-SA 4.0</a> licensed
+</TBODY></TABLE>
+<HR>
+<DIV class="center">
+</DIV></DIV>
+</HTML>\n}
+
+/*===== MARK-UP ======================================================*/
+
+MARKUP[display=inline]
+      {<SPAN class="markup"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[display="block"]
+      {<DIV class="markup"><![CDATA[}
+    / {]]></DIV>}
+      
+MARKUP[notation][display = "inline"]
+      {<SPAN class="markup $notation"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[notation][display="block"]
+      {<DIV class="markup $notation">}
+    / {</DIV>}
+      
+MARKUP[notation][info][display="inline"]
+      {<SPAN class="markup $notation" title="$info"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[notation][info][display="block"]
+      {<DIV class="markup $notation" title="$info"><![CDATA[}
+    / {]]></DIV>}
+
+MARKUP[notation="HTML"][display="inline"]
+      - / -
+/*===== CM.DOC =======================================================*/
+
+/* CM.DOC - Maps to HTML <BODY> */
+
+CM.DOC +
+{<BODY class="article" lang="$:lang">
+<H1 class="title" id="dc.title">$:DC.title</H1>
+<DIV class="center">
+<P class="note"><A href="mailto:$:DC.creator">$:DC.creator</A><BR>
+$:DC.date</DIV>} +
+/ -
+
+/*===== CM.QUO-B =====================================================*/
+
+CM.QUO-B + "<BLOCKQUOTE>" + / + "</BLOCKQUOTE>" +
+
+/*===== CM.LIST ======================================================*/
+
+/* CM.LIST - Maps to <OL> or <UL>. */
+
+/* Classes for UL: class=  1. "tight"
+                           2. "loose"
+
+           for OL: class=  1. "tight alf paren"
+	                   2. "tight num period"
+			   3. "loose alf paren"
+			   4. "loose num period"
+*/
+
+CM.LIST[type="bullet"][tight="true"] 
+    + '<UL class="tight">' / '</UL>' +
+
+CM.LIST[type="bullet"][tight="false"]
+    + '<UL class="loose">' / '</UL>' +
+
+CM.LIST[type="ordered"][tight="true"][delim="period"]
+    + {<OL title="$start" class="tight num period">} / {</OL>} +
+
+CM.LIST[type="ordered"][tight="false"][delim="period"]
+    + {<OL title="$start" class="loose num period">} / {</OL>} +
+
+CM.LIST[type="ordered"][tight="true"][delim="paren"]
+    + {<OL title="$start" class="tight alf paren">} / {</OL>} +
+
+CM.LIST[type="ordered"][tight="false"][delim="paren"]
+    + {<OL title="$start" class="loose alf paren">} / {</OL>} +
+
+/*===== CM.LI ========================================================*/
+/* CM.LI - Maps to <LI>, but </LI> can be omitted. */
+
+CM.LI "<LI>" / -
+
+/*===== CM.COD-B =====================================================*/
+
+CM.COD-B           '<PRE><CODE>'
+                                  / '</CODE></PRE>'
+CM.COD-B[info]     '<PRE><CODE info="$info">'
+                                  / '</CODE></PRE>'
+CM.COD-B[notation] '<PRE><CODE notation="$notation">'
+                                  / '</CODE></PRE>'
+CM.COD-B[info][notation] 
+                    '<PRE><CODE notation="$notation" info="$info">'
+                                  / '</CODE></PRE>'
+
+/*===== CM.COD =======================================================*/
+
+CM.COD           '<CODE>'                       / '</CODE>'
+CM.COD[info]     '<CODE info="$info">'          / '</CODE>'
+CM.COD[notation] '<CODE notation="$notation">'  / '</CODE>'
+CM.COD[info][notation] '<CODE notation="$notation" info="$info">'
+                                                 / '</CODE>'
+                                                             
+/*===== CM.PAR =======================================================*/
+
+CM.PAR "<P>" / "</P>" +
+
+/*===== CM.HDR =======================================================*/
+/* CM.HDR - Maps to <H1> .. <H6> */
+
+CM.HDR + "<H$level>" / "</H$level>\n"
+
+/*===== CM.HR ========================================================*/
+/* CM.HR - Maps to <HR>, which is EMPTY. */
+
+CM.HR "<HR>" / -
+
+/*===== CM.TXT =======================================================*/
+/* CM.TXT - Omit start and end tag. */
+
+/*===== CM.SF-BR - Just a line break in the output text. =============*/
+
+CM.SF-BR '\n' / -
+
+/*===== CM.LN-BR =====================================================*/
+/* CM.LN-BR - Maps to HTML <BR>, which is EMPTY. */
+
+CM.LN-BR "<BR>" / - 
+
+
+/*===== CM.EMPH ======================================================*/
+
+CM.EMPH "<EM>" / "</EM>"
+
+/*===== CM.STRN ======================================================*/
+
+CM.STRN "<STRONG>" / "</STRONG>"
+
+/*===== CM.LNK =======================================================*/
+/* CM.LNK - Maps to <A> element 
+   with 'href' attribute for destination. */
+
+CM.LNK '<A href="$destination" title="$title">' / '</A>'
+
+/*===== CM.IMG =======================================================*/
+
+/* Maps to <IMG> element with 'src' for URL; EMPTY. */
+
+CM.IMG '<IMG src="$url" title="$title">' / -
+

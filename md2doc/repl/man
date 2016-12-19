@@ -1,0 +1,76 @@
+-- man - Experimental Replacement File for groff man pages,
+         emulates cmark -t man                                        --
+
+<CM.DOC>
+
+<CM.QUO-B>
+		+ ".RS" +
+</CM.QUO-B>
+		+ ".RE" +
+		
+% <CM.LIST>
+<CM.LI>
+		+ ".IP [type=bullet?\\\[bu\] 2:\"1.\" 4]" +
+
+</CM.LI>
+		"\n"
+
+<CM.COD-B>
+	+ ".IP\n.nf\n\\f\[C\]\n"
+</CM.COD-B>
+	+ "\\f\[\]\n.fi" +
+
+% <CM.FRG-B>
+
+<CM.PAR>
+		+ ".PP" +
+		
+</CM.PAR>
+		"\n"
+		
+<CM.HDR>
+		+ "[level=1?.SH:.SS]" +
+		
+-- Is PLUS alone effecting a EOL (if one is needed?) --
+</CM.HDR>
+		+
+
+<CM.HR>
+		+ ".PP\n  *  *  *  *  *" +
+		
+% <CM.TXT>
+
+-- Not sure if this is what it should be --
+<CM.SF-BR>
+		+ " "
+		
+<CM.LN-BR>
+		+ ".PD 0\n.P\n.PD" +
+		
+<CM.COD>
+		"\\f\[C\]"
+		
+</CM.COD>
+		"\\f\[\]"
+		
+% <CM.FRG>
+
+<CM.EMPH>
+		"\\f\[I\]"
+</CM.EMPH>
+		"\\f\[\]"
+
+<CM.STRN>
+		"\\f\[B\]"
+</CM.STRN>
+		"\\f\[\]"
+		
+<CM.LNK>
+		"  ("
+</CM.LNK>
+		")"
+		
+<CM.IMG>
+		"\[IMAGE: "
+</CM.IMG>
+		"\]"

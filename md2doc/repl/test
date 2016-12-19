@@ -1,0 +1,171 @@
+/*===== html ===========================================================
+
+        html: Basic HTML document
+
+Result document type:
+
+    DOCTYPE HTML PUBLIC "ISO/IEC 15445:2000//DTD HTML//EN"
+
+CommonMark node types:
+
+ 1. Block:
+	CM.DOC	    CM.QUO-B    CM.LIST	    CM.LI
+	CM.COD-B    CM.HTM-B	CM.PAR	    CM.HDR
+	CM.HR		
+  
+ 2. Inline 
+	CM.TXT	    CM.SF-BR 	CM.LN-BR    CM.COD
+	CM.EMPH	    CM.STRN	CM.LNK	
+	CM.IMG	    CM.HTM
+  
+ 3. Special
+	MARKUP
+
+======================================================================*/
+
+/*===== PROLOG -======================================================*/
+
+@prolog
+{<!DOCTYPE test>
+<HTML><HEAD>
+ <TITLE>$:DC.title</TITLE>
+ <SCRIPT src="ASCIIMathML.js"></SCRIPT>
+</HEAD>} +
+
+/*===== EPILOG =======================================================*/
+/* HTML epilog: </HTML> is required. */
+
+@epilog + '</HTML>' +
+
+/*===== CM.DOC =======================================================*/
+/* CM.DOC - Maps to HTML <BODY> */
+
+CM.DOC + '<BODY lang="$:lang">' + / + '</BODY>' +
+
+/*===== CM.QUO-B =====================================================*/
+
+CM.QUO-B + "<BLOCKQUOTE>" / "</BLOCKQUOTE>" +
+
+/*===== CM.LIST ======================================================*/
+/* CM.LIST - Maps to <OL> or <UL>. */
+
+/* Classes for UL: class=  1. "tight"
+                           2. "loose"
+
+           for OL: class=  1. "tight alf paren"
+	                   2. "tight num period"
+			   3. "loose alf paren"
+			   4. "loose num period"
+*/
+
+CM.LIST[type=bullet][tight=true]
+    + '<UL class="tight">' / '</UL>' +
+
+CM.LIST[type=bullet][tight=false]
+    + '<UL class="loose">' / '</UL>' +
+
+CM.LIST[type=ordered][tight=true][delim=period]
+    + '<OL title="$start" class="tight num period">' / '</OL>' +
+
+CM.LIST[type=ordered][tight=false][delim=period]
+    + '<OL title="$start" class="loose num period">' / '</OL>' +
+
+CM.LIST[type=ordered][tight=true][delim=paren]
+    + '<OL title="$start" class="tight alf paren" >' / '</OL>' +
+
+CM.LIST[type=ordered][tight=false][delim=paren]
+    + '<OL title="$start" class="loose alf paren" >' / '</OL>' +
+
+/*======= CM.LI ======================================================*/
+
+CM.LI '<LI>' / '</LI>'
+
+/*===== CM.COD-B =====================================================*/
+
+CM.COD-B           + '<PRE><CODE>'
+                                  / '</CODE></PRE>' +
+
+CM.COD-B[info]     + '<PRE><CODE title="$info">'
+                                  / '</CODE></PRE>' +
+
+/*======= CM.COD =====================================================*/
+
+CM.COD           '<CODE>'                      / '</CODE>'
+CM.COD[info]     '<CODE title="$info">'        / '</CODE>'
+                                                             
+/*===== CM.PAR =======================================================*/
+
+CM.PAR + '<P>' / '</P>' +
+
+/*======= CM.HDR =====================================================*/
+/* CM.HDR - Maps to <H1> .. <H6> */
+
+CM.HDR + '<H$level>' / '</H$level>' +
+
+/*======= CM.HR ======================================================*/
+/* CM.HR - Maps to <HR>, which is EMPTY. */
+
+CM.HR '<HR>' / -
+
+/*======= CM.TXT =====================================================*/
+/* CM.TXT - Omit start and end tag. */
+
+/*======= CM.SF-BR - Just a line break in the output text. ===========*/
+
+CM.SF-BR + / -
+
+/*======= CM.LN-BR ===================================================*/
+/* CM.LN-BR - Maps to HTML <BR>, which is EMPTY. */
+
+CM.LN-BR '<BR>' / - 
+
+
+/*======= CM.EMPH ====================================================*/
+
+CM.EMPH '<EM>' / '</EM>'
+
+/*======= CM.STRN ====================================================*/
+
+CM.STRN '<STRONG>' / '</STRONG>'
+
+/*======= CM.LNK =====================================================*/
+/* CM.LNK - Maps to <A> element 
+   with 'href' attribute for destination. */
+
+CM.LNK {<A href="$destination" title="$title">} / {</A>}
+
+/*======= CM.IMG =====================================================*/
+/* Maps to <IMG> element with 'src' for URL; EMPTY. */
+
+CM.IMG {<IMG src="$url" title="$title">} / -
+
+/*======= MARKUP =====================================================*/
+MARKUP[notation=Z][display=inline] {<ZED>} / {</ZED>}
+/*
+MARKUP[display=inline]
+      {<SPAN class="markup"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[display=block]
+      {<DIV class="markup"><![CDATA[}
+    / {]]></DIV>}
+      
+MARKUP[notation][display=inline]
+      {<SPAN class="markup $notation"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[notation][display=block]
+      {<DIV class="markup $notation"><![CDATA[}
+    / {]]></DIV>}
+      
+MARKUP[notation][info][display=inline]
+      {<SPAN class="markup $notation" title="$info"><![CDATA[}
+    / {]]></SPAN>}
+      
+MARKUP[notation][info][display=block]
+      {<DIV class="markup $notation" title="$info"><![CDATA[}
+    / {]]></DIV>}
+
+MARKUP[notation=HTML][display=inline]
+      - / -
+*/

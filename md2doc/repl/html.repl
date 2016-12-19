@@ -1,0 +1,119 @@
+ -- html.repl - ISO/IEC 15445:2000//DTD HTML --
+
+#PROLOG 
+	"<!DOCTYPE HTML PUBLIC \"ISO/IEC 15445:2000//DTD HTML//EN\">\n"
+	"<HTML>\n"
+	"<HEAD>\n"
+	"  <META http-equiv=\"Content-Type\" content=\"text/html; "
+	                                            "charset=UTF-8\">\n"
+	"  <META name=\"GENERATOR\"\n"
+	"        content=\"cm2doc ([cm2doc.version]) using "
+	                               "cmark (ver: [cmark.version])\">\n"
+	"  <LINK rel=\"schema.DC\"   "
+	                  "href=\"http://purl.org/dc/elements/1.1/\">\n"
+	"  <META name=\"DC.format\"  content=\"text/html\" "
+	                                     "scheme=\"DCTERMS.IMT\">\n"
+	"  <META name=\"DC.type\"    content=\"Text\""
+	                                "scheme=\"DCTERMS.DCMIType\">\n"
+	"  <META name=\"DC.title\"   content=\"[DC.title]\">\n"
+	"  <META name=\"DC.creator\" content=\"[DC.creator]\">\n"
+	"  <META name=\"DC.date\"    content=\"[DC.date]\">\n"
+	"  <LINK rel=\"stylesheet\"  type=\"text/css\"\n"
+	"        href=\"[cm2doc.css]\">\n"
+	"  <TITLE>[DC.title]</TITLE>\n" % </HEAD> OMIT
+
+% HTML epilog: </HTML> is required.
+
+#EPILOG
+	"</HTML>\n"
+
+% CommonMark node types:
+%
+% DOC		QUOTE-BL	LIST		ITEM		CODE-BL
+% HTML-B	PARA		HEADER		HRULE		TEXT
+% SOFT-BR	LINE-BR		CODE		HTML		EMPH
+% STRONG	LINK		IMAGE
+
+% DOC - Maps to HTML <BODY>
+<DOC>
+	+ "<BODY>"
+	"<H1>[.DC.title]</H1>\n"
+	'<DIV class="abstract">\n'
+	'  <P><A href="mailto:[.DC.creator]">[.DC.creator]</A><BR>\n'
+	"[.DC.date]</P>\n"
+	"</DIV>" +
+
+<QUOTE-BL>
+	+ "<BLOCKQUOTE>" +
+</QUOTE-BL>
+	+ "</BLOCKQUOTE>" +
+
+% LIST - Maps to <OL> or <UL>.
+<LIST>
+	+ "<[type=ordered?OL:UL]>"
+</LIST>
+	"</[type=ordered?OL:UL]>" +
+
+ % ITEM - Maps to <LI>, but </LI> can be omitted.
+<ITEM>
+	"<LI>"
+
+<CODE-BL>
+	+ "<PRE><CODE>" +
+</CODE-BL>
+	+ "</CODE></PRE>" +
+
+% LIT-BL ("HTML Block") - Omit start and end tag.
+
+<PARA>
+	+ "<P>"
+</PARA>
+	"</P>" +
+
+% HEADER - Maps to <H1> .. <H6>
+<HEADER>
+	"<H[level]>"
+</HEADER>
+	"</H[level]>"
+
+% HRULE - Maps to <HR>, which is EMPTY.
+<HRULE>
+	"<HR>"
+
+% TEXT - Omit start and end tag.
+
+% SOFT-BR - Just a line break in the output text.
+<SOFT-BR>
+	"\n"
+
+% LINE-BR - Maps to HTML <BR>, which is EMPTY.
+<LINE-BR>
+	"<BR>"
+
+<CODE>
+	"<CODE>"
+</CODE>
+	"</CODE>"
+
+% LIT-BL ("Inline HTML") - Omit start and end tag.
+
+<EMPH>
+	"<EM>"
+</EMPH>
+	"</EM>"
+
+<STRONG>
+	"<STRONG>"
+</STRONG>
+	"</STRONG>"
+
+% LINK - Maps to <A> element with 'href' attribute for destination.
+<LINK>
+	"<A href=\"[destination]\" title=\"[title]\">"
+</LINK>
+	"</A>"
+
+ % IMGAGE - Maps to <IMG> element with 'src' for URL; EMPTY.
+<IMAGE>
+	"<IMG src=\"[url]\" title=\"[title]\">"
+

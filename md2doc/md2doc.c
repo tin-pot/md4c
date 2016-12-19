@@ -218,9 +218,6 @@ typedef struct ESIS_Port_ {
  
 ESIS_Port* generate_repl(FILE *to,               unsigned options);
 ESIS_Port* generate_rast(FILE *to,               unsigned options);
-ESIS_Port* generate_esis(FILE *to,               unsigned options);
-
-ESIS_Port* filter_toc(ESIS_Port*to,              unsigned options);
 
 #define DO_ATTR(N, V, L)   esis_cb->attr(esis_ud, N, V, L)
 #define DO_START(NT)       esis_cb->start(esis_ud, NT)
@@ -509,15 +506,15 @@ static const char *rn_repl[RN_NUM]; /* Replacement texts for RNs. */
 typedef size_t textidx_t;  /* Index into `text_buf` below. */
 
 struct taginfo_ {
-    enum node_type nt;
-    textidx_t	    atts[2*ATTCNT + 2];
+    enum node_type     nt;
+    textidx_t	       atts[2*ATTCNT + 2];
 };
 
 struct repl_ {
-    struct taginfo_ taginfo;
-    const char     *repl[2];
-    bool            is_cdata;
-    struct repl_   *next;
+    struct taginfo_    taginfo;
+    const char        *repl[2];
+    bool               is_cdata;
+    struct repl_      *next;
 };
 
 /*
@@ -528,7 +525,6 @@ struct repl_ {
 static struct repl_ *repl_tab[NODE_NUM];
 
 static octetbuf text_buf = { 0 };
-
 
 
 /*== Element Stack Keeping ===========================================*/
@@ -845,8 +841,8 @@ bool is_notation(const char *nmtoken, size_t len)
 
 void register_notation(const char *nmtoken, size_t len)
 {
-    struct notation_name_ *pn = malloc(sizeof *pn);
-    char *name = malloc(len + 1);
+    struct notation_name_ *pn;
+    char *name;
     size_t k;
     
     assert(nmtoken != NULL);
@@ -865,10 +861,15 @@ void register_notation(const char *nmtoken, size_t len)
 	    error("\"%*.s\": Invalid NOTATION name.\n", (int)len,
                                                                nmtoken);
     }
+    
+    name      = malloc(len + 1);
     memcpy(name, nmtoken, len);
     name[len] = NUL;
+    
+    pn       = malloc(sizeof *pn);
     pn->name = name;
     pn->next = notations;
+    
     notations = pn;
 }
 
@@ -1204,227 +1205,6 @@ ESIS_Port* generate_rast(FILE *to, unsigned options)
     rast_param.options = options;
     return &rast_port;
 }
-
-/*== Generator for OpenSP format ESIS output =========================*/
-
-/*== Parser for OpenSP format ESIS input  ============================*/
-
-/*== CommonMark Document Rendering into an ESIS Port ================*/
-
-/*
- * Rendering a document node into the ESIS callbacks.
- */
- 
-
-struct infosplit {
-    const char  *name, *suffix;
-    size_t       nlen,  slen;
-};
-
-static int infosplit(struct infosplit *ps, const char *s, size_t n)
-{
-    const char *t, *u;
-    bool suppress = false, found = false;
-    
-    while (n > 0U && (*s == SP || *s == HT)) {
-        ++s, --n;
-    }
-    t = s;
-    ps->suffix = s;
-    ps->slen   = n;
-    if (n > 0U && *t == NOTA_DELIM) {
-        ++t, --n;
-        suppress = true;
-    }
-    for (u = t; n > 0U && ISNMCHAR(*u); ++u, --n)
-        ;
-    if (t < u && n > 0U && *u == NOTA_DELIM) {
-        ps->name = t;
-        ps->nlen = (size_t)(u - t);
-        found = is_notation(ps->name, ps->nlen); 
-        if (found) {
-            if (suppress) {
-                ++ps->suffix;
-                --ps->slen;
-            } else {
-                ps->suffix = (n > 1) ? u + 1 : NULL;
-                ps->slen   = (n > 1) ? n - 1 : 0U;
-            }
-        }
-    }
-    return found && !suppress;
-}
-
-#if 0
-static int S_render_node_esis(cmark_node *node,
-                              cmark_event_type ev_type,
-                              ESIS_Port *to)
-{
-    cmark_delim_type delim;
-    bool entering = (ev_type == CMARK_EVENT_ENTER);
-    char buffer[100];
-
-    const ESIS_CB  *esis_cb = to->cb;
-    ESIS_UserData   esis_ud = to->ud;
-
-    if (!entering) {
-	if (node->first_child) {
-	    DO_END(node->type);
-	}
-	return 1;
-    }
-    
-    switch (node->type) {
-    case NODE_TEXT:
-    case NODE_HTML_BLOCK:
-    case NODE_HTML_INLINE:
-	if (node->type != NODE_TEXT) {
-	    DO_ATTR("type", "HTML", NTS);
-	    DO_ATTR("display", node->type == NODE_HTML_BLOCK ? 
-		    "block" : "inline", NTS);
-	}
-	DO_START(node->type);
-	DO_CDATA(node->as.literal.data, node->as.literal.len);
-	DO_END(node->type);
-	break;
-
-    case NODE_LIST:
-	switch (cmark_node_get_list_type(node)) {
-	case CMARK_ORDERED_LIST:
-	    DO_ATTR("type", "ordered", NTS); 
-	    sprintf(buffer, "%d", cmark_node_get_list_start(node));
-	    DO_ATTR("start", buffer, NTS);
-	    delim = cmark_node_get_list_delim(node);
-	    DO_ATTR("delim", (delim == CMARK_PAREN_DELIM) ?
-		"paren" : "period", NTS);
-	    break;
-	case CMARK_BULLET_LIST:
-	    DO_ATTR("type", "bullet", NTS);
-	    break;
-	default:
-	    break;
-	}
-	DO_ATTR("tight", cmark_node_get_list_tight(node) ?
-	    "true" : "false", NTS);
-	DO_START(node->type);
-	break;
-
-    case NODE_HEADING:
-	sprintf(buffer, "%d", node->as.heading.level);
-	DO_ATTR("level", buffer, NTS);
-	DO_START(node->type);
-	break;
-
-    case NODE_CODE:
-    case NODE_CODE_BLOCK:
-	/*
-	 * If the info string (for code block) rsp the data string (for
-	 * inline code) has the form:
-	 *
-	 *     ( { S } , name , "|" , suffix )
-	 *
-	 * where *S* is `SP` or `TAB`, *name* is the name of a known
-	 * notation, and *suffix* any string, then we convert the
-	 * code element into a custom element.
-	 *
-	 * What if the info/data string is nevertheless the intended
-	 * content and this conversion should not take place?
-	 *
-	 *     ( { S } , "|", name , "|" , suffix )
-	 */
-	{
-	    cmark_node_type    nt = node->type;
-	    struct infosplit   split;
-	    const char        *info, *data;
-	    size_t             ilen,  dlen;
-	    const bool         is_inline = (nt == NODE_CODE);
-
-	    info = node->as.code.info.data;
-	    ilen = node->as.code.info.len;
-
-	    if (infosplit(&split, info, ilen)) {
-		/*
-		 * Use split.name as notation name,
-		 * and if inline, split.suffix as content or (if block)
-		 * suffix as extra info.
-		 */
-		nt = NODE_MARKUP;
-		DO_ATTR("notation", split.name, split.nlen);
-		if (is_inline) {
-		    DO_ATTR("display", "inline", 6U);
-		    data = split.suffix;
-		    dlen = split.slen;
-		} else {
-		    DO_ATTR("display", "block", 5U);
-		    data = node->as.code.literal.data;
-		    dlen = node->as.code.literal.len;
-		    if (split.slen > 0U)
-			DO_ATTR("info", split.suffix, split.slen);
-		}
-	    } else {
-		/*
-		 * Regular code element, if inline use info as content,
-		 * if block it is the info attribute.
-		 */
-		if (is_inline) {
-		    data = split.suffix;
-		    dlen = split.slen;
-		} else {
-		    data = node->as.code.literal.data;
-		    dlen = node->as.code.literal.len;
-		    if (split.slen > 0U)
-			DO_ATTR("info", split.suffix, split.slen);
-		}
-	    }
-
-	    DO_START(nt);
-	    DO_CDATA(data, dlen);
-	    DO_END(nt);
-	}
-	break;
-
-    case NODE_LINK:
-    case NODE_IMAGE:
-	DO_ATTR("destination",
-	    node->as.link.url.data, node->as.link.url.len);
-	DO_ATTR("title", node->as.link.title.data,
-	    node->as.link.title.len);
-	DO_START(node->type);
-	break;
-
-    case NODE_HRULE:
-    case NODE_SOFTBREAK:
-    case NODE_LINEBREAK:
-	DO_START(node->type);
-	DO_END(node->type);
-	break;
-
-    case NODE_DOCUMENT:
-    default:
-	DO_START(node->type);
-	break;
-    } /* switch */
-
-    return 1;
-}
-#endif /* 0 */
-
-#if 0
-char *cmark_render_esis(cmark_node *root, ESIS_Port *to)
-{
-  cmark_event_type ev_type;
-  cmark_node *cur;
-  cmark_iter *iter = cmark_iter_new(root);
-
-  while ((ev_type = cmark_iter_next(iter)) != CMARK_EVENT_DONE) {
-    cur = cmark_iter_get_node(iter);
-    S_render_node_esis(cur, ev_type, to);
-  }
-  cmark_iter_free(iter);
-  return NULL;
-}
-#endif /* 0 */
-
 
 /*====================================================================*/
 
@@ -2244,31 +2024,361 @@ FILE *open_repl_file(const char *repl_filename, FILE *verbose)
 /*====================================================================*/
 
 /*
- * renderer -- MD4C renderer pushing into ESIS_port.
+ * renderer -- MD4C renderer callbacks to feed into an ESIS_port.
  */
+
+struct infosplit {
+    const char  *name, *suffix;
+    size_t       nlen,  slen;
+};
+
+static int infosplit(struct infosplit *ps, const char *s, size_t n)
+{
+    const char *t, *u;
+    bool suppress = false, found = false;
+    
+    while (n > 0U && (*s == SP || *s == HT)) {
+        ++s, --n;
+    }
+    t = s;
+    ps->suffix = s;
+    ps->slen   = n;
+    if (n > 0U && *t == NOTA_DELIM) {
+        ++t, --n;
+        suppress = true;
+    }
+    for (u = t; n > 0U && ISNMCHAR(*u); ++u, --n)
+        ;
+    if (t < u && n > 0U && *u == NOTA_DELIM) {
+        ps->name = t;
+        ps->nlen = (size_t)(u - t);
+        found = is_notation(ps->name, ps->nlen); 
+        if (found) {
+            if (suppress) {
+                ++ps->suffix;
+                --ps->slen;
+            } else {
+                ps->suffix = (n > 1) ? u + 1 : NULL;
+                ps->slen   = (n > 1) ? n - 1 : 0U;
+            }
+        }
+    }
+    return found && !suppress;
+}
+
+static bool codespan_ahead = false;
+static bool code_as_markup = false;
 
 static int cb_enter_block(MD_BLOCKTYPE type, void *detail, void *userData)
 {
+    ESIS_Port     *to = userData;
+    
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
+    
+    switch (type) {
+    case MD_BLOCK_DOC:
+        DO_START(NODE_DOCUMENT);
+        break;
+        
+    case MD_BLOCK_QUOTE:
+        DO_START(NODE_BLOCKQUOTE);
+        break;
+        
+    case MD_BLOCK_UL:
+        /* TODO: Where's the 'tight (true|false)' attribute of CommonMark? */
+        DO_ATTR("type", "bullet", 6U);
+        DO_START(NODE_LIST);
+        break;
+        
+    case MD_BLOCK_OL:
+        /* TODO: Where's the 'tight (true|false)' attribute of CommonMark? */
+        /* TODO: Where's the 'delim (paren|period) attribute of CommonMark? */
+        {
+            MD_BLOCK_OL_DETAIL *d = detail;
+            char num[16];
+            
+            sprintf(num, "%u", d->start);
+            DO_ATTR("type", "ordered", 7U);
+            DO_ATTR("start", num, NTS);
+            DO_START(NODE_LIST);
+        }
+        break;
+        
+    case MD_BLOCK_LI:
+        DO_START(NODE_LISTITEM);
+        break;
+        
+    case MD_BLOCK_HR:
+        DO_START(NODE_HRULE);
+        break;
+        
+    case MD_BLOCK_H:
+        {
+            MD_BLOCK_H_DETAIL *d = detail;
+            char num[16];
+            
+            sprintf(num, "%u", d->level);
+            DO_ATTR("level", num, NTS);
+            DO_START(NODE_HEADING);
+        }
+        break;
+        
+    case MD_BLOCK_CODE:
+        {
+            MD_BLOCK_CODE_DETAIL *d = detail;
+            struct infosplit   split;
+            const char        *info;
+            size_t             ilen;
+            
+            info = d->info.text;
+            ilen = d->info.size;
+            
+            if (infosplit(&split, info, ilen)) {
+                /*
+                 * Info string indicated a notation.
+                 */
+                DO_ATTR("notation", split.name, split.nlen);
+                DO_ATTR("display", "block", 5U);
+                DO_START(NODE_MARKUP);
+                code_as_markup = true;
+            } else {
+                /*
+                 * Ordinary info string.
+                 */
+                DO_ATTR("info", d->info.text, d->info.size);
+                DO_ATTR("lang", d->lang.text, d->lang.size);
+                DO_START(NODE_CODE_BLOCK);
+                code_as_markup = false;
+            }
+        }
+        break;
+        
+    case MD_BLOCK_HTML:
+        DO_ATTR("type", "HTML", 4U);
+        DO_ATTR("display", "block", 5U);
+        DO_START(NODE_HTML_BLOCK);
+        break;
+        
+    case MD_BLOCK_P:
+        DO_START(NODE_PARA);
+        break;
+        
+    case MD_BLOCK_TABLE:
+    case MD_BLOCK_THEAD:
+    case MD_BLOCK_TBODY:
+    case MD_BLOCK_TR:
+    case MD_BLOCK_TH:
+    case MD_BLOCK_TD:
+        break;
+    }
     return 0;
 }
 
 static int cb_leave_block(MD_BLOCKTYPE type, void *detail, void *userData)
 {
+    ESIS_Port     *to = userData;
+    
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
+    
+    switch (type) {
+    case MD_BLOCK_DOC:
+        DO_END(NODE_DOCUMENT);
+        break;
+    case MD_BLOCK_QUOTE:
+        DO_END(NODE_BLOCKQUOTE);
+        break;
+    case MD_BLOCK_UL:
+    case MD_BLOCK_OL:
+        DO_END(NODE_LIST);
+        break;
+    case MD_BLOCK_LI:
+        DO_END(NODE_LISTITEM);
+        break;
+    case MD_BLOCK_HR:
+        DO_END(NODE_HRULE);
+        break;
+    case MD_BLOCK_H:
+        DO_END(NODE_HEADING);
+        break;
+    case MD_BLOCK_CODE:
+        DO_END((code_as_markup) ? NODE_MARKUP : NODE_CODE_BLOCK);
+        break;
+    case MD_BLOCK_HTML:
+        DO_END(NODE_HTML_BLOCK);
+        break;
+    case MD_BLOCK_P:
+        DO_END(NODE_PARA);
+        break;
+        
+    case MD_BLOCK_TABLE:
+    case MD_BLOCK_THEAD:
+    case MD_BLOCK_TBODY:
+    case MD_BLOCK_TR:
+    case MD_BLOCK_TH:
+    case MD_BLOCK_TD:
+        break;
+    }
     return 0;
 }
 
 static int cb_enter_span(MD_SPANTYPE type, void *detail, void *userData)
 {
+    ESIS_Port     *to = userData;
+    
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
+    
+    switch (type) {
+    case MD_SPAN_EM:
+        DO_START(NODE_EMPH);
+        break;
+        
+    case MD_SPAN_STRONG:
+        DO_START(NODE_STRONG);
+        break;
+        
+    case MD_SPAN_A:
+        {
+            MD_SPAN_A_DETAIL *d = detail;
+            DO_ATTR("destination", d->href.text, d->href.size);
+            DO_ATTR("title", d->title.text, d->title.size);
+            DO_START(NODE_LINK);
+        }
+        break;
+        
+    case MD_SPAN_IMG:
+        {
+            MD_SPAN_IMG_DETAIL *d = detail;
+            DO_ATTR("destination", d->src.text, d->src.size);
+            DO_ATTR("title", d->title.text, d->title.size);
+            DO_START(NODE_IMAGE);
+        }
+        break;
+        
+    case MD_SPAN_CODE:
+        {
+            /*
+             * We can't do nothing here, until we've seen the initial
+             * portion of the code - it could be an 'info' string
+             * indicating some notation.
+             */
+            codespan_ahead = true;
+        }
+        break;
+    }
     return 0;
 }
 
 static int cb_leave_span(MD_SPANTYPE type, void *detail, void *userData)
 {
+    ESIS_Port     *to = userData;
+    
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
+    
+    switch (type) {
+    case MD_SPAN_EM:
+        DO_END(NODE_EMPH);
+        break;
+    case MD_SPAN_STRONG:
+        DO_END(NODE_STRONG);
+        break;
+    case MD_SPAN_A:
+        DO_END(NODE_LINK);
+        break;
+    case MD_SPAN_IMG:
+        DO_END(NODE_IMAGE);
+        break;
+    case MD_SPAN_CODE:
+        DO_END((code_as_markup) ? NODE_MARKUP : NODE_CODE_INLINE);
+        break;
+    }
     return 0;
 }
 
 static int cb_text(MD_TEXTTYPE type, const MD_CHAR *text, MD_SIZE size, void *userData)
 {
+    ESIS_Port     *to = userData;
+    
+    const ESIS_CB *esis_cb = to->cb;
+    ESIS_UserData  esis_ud = to->ud;
+    
+    switch (type) {
+    case MD_TEXT_NORMAL:
+        DO_CDATA(text, size);
+        break;
+        
+    case MD_TEXT_NULLCHAR:
+        DO_CDATA("&#0;", NTS); /* TODO: Better idea? */
+        break;
+        
+    case MD_TEXT_BR:
+        /* TODO: Why is this 'text', not a 'span' element? */
+        DO_START(NODE_LINEBREAK);
+        DO_END(NODE_LINEBREAK);
+        break;
+        
+    case MD_TEXT_SOFTBR:
+        DO_START(NODE_SOFTBREAK);
+        DO_END(NODE_SOFTBREAK);
+        break;
+        
+    case MD_TEXT_ENTITY:
+        DO_CDATA(text, size); /* No entity substitution for now! */
+        break;
+        
+    case MD_TEXT_CODE:
+        if (codespan_ahead) {
+            struct infosplit   split;
+            const char        *info, *data;
+            size_t             ilen,  dlen;
+            
+            /*
+             * First piece of a code span: Inspect for 'info' string,
+             * if it indicates a notation, translate into MARKUP
+             * element.
+             */
+            
+            info = text;
+            ilen = size;
+            
+            if (infosplit(&split, info, ilen)) {
+                /*
+                 * Info string indicated a notation.
+                 */
+                data = split.suffix;
+                dlen = split.slen;
+                DO_ATTR("notation", split.name, split.nlen);
+                DO_ATTR("display", "inline", 6U);
+                DO_START(NODE_MARKUP);
+                code_as_markup = true;
+            } else {
+                /*
+                 * No special info string.
+                 */
+                data = text;
+                dlen = size;
+                DO_START(NODE_CODE_INLINE);
+                code_as_markup = false;
+            }
+            DO_CDATA(data, dlen);
+            codespan_ahead = false;
+        } else {
+            DO_CDATA(text, size);
+        }
+        break;
+        
+    case MD_TEXT_HTML:
+        /* TODO: Why no MD_SPAN_HTML announcement? */
+        DO_ATTR("type", "HTML", 4U);
+        DO_ATTR("display", "inline", 6U);
+        DO_START(NODE_HTML_INLINE);
+        DO_CDATA(text, size);
+        DO_END(NODE_HTML_INLINE);
+        break;
+    }
     return 0;
 }
 
@@ -2291,9 +2401,9 @@ static MD_RENDERER renderer = {
  * gen_document -- Driver for the replacement backend
  *
  *  1. Start the outermost "universal" pseudo-element.
- *  2. Output the replacement text for #PROLOG, if any.
- *  3. Render the document into the given ESIS API callbacks.
- *  4. Output the replacement text for #EPILOG, if any.
+ *  2. Output the replacement text for @prolog, if any.
+ *  3. Render the document into the given ESIS port.
+ *  4. Output the replacement text for @epilog, if any.
  *  5. End the outermost pseudo-element.
  *  6. [Not needed]: Clean up the attribute stack.
  */
@@ -2304,10 +2414,8 @@ static void gen_document(const octetbuf *text,
 {
     const ESIS_CB *esis_cb = to->cb;
     ESIS_UserData  esis_ud = to->ud;
-    int bol[2];
     
     DO_START(NODE_NONE);
-    bol[0] = bol[1] = 0;
     
     if (rn_repl[RN_PROLOG] != NULL) {
 	put_repl(rn_repl[RN_PROLOG]);
@@ -2406,7 +2514,7 @@ int process_file(FILE *from, ESIS_Port *to, unsigned options,
 {
     static bool in_header = true;
     static char buffer[BUFSIZ];
-    octetbuf text = { 0 };
+    static octetbuf text = { 0 };
     
     size_t bytes;
     
@@ -2579,20 +2687,6 @@ int main(int argc, char *argv[])
     }
     
     prep_init(dgr_arg);
-    
-#if 0
-    {
-	static const char *const notations[] = {
-	    "HTML",	"Z",    "EBNF",	    "VDM",
-	    "C90",	"C11",	"ASN.1",    "Ada95",
-	    NULL
-	};
-	int i;
-	
-	for (i = 0; notations[i] != NULL; ++i)
-	    register_notation(notations[i], NTS);
-    }
-#endif
     
     /*
      * If no replacement file was mentioned (and processed),

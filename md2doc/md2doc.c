@@ -111,7 +111,9 @@ THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
 #include <stdarg.h>
 #include <stdio.h>
 #ifdef _MSC_VER
+#ifndef snprintf
 #define snprintf _snprintf
+#endif
 #endif
 #include <stdlib.h>
 #include <string.h>

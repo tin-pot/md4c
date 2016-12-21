@@ -26,7 +26,9 @@
 #include "octetbuf.h"
 
 #ifdef _MSC_VER
+#ifndef snprintf
 #define snprintf _snprintf
+#endif
 #endif
 
 #define NDIGRAPH 1000

@@ -41,7 +41,7 @@
 			<Tool
 				Name="VCCLCompilerTool"
 				Optimization="0"
-				AdditionalIncludeDirectories="$(SolutionDir)..\md4c"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)..\md4c&quot;;&quot;$(PROJECTS_ROOT_DIR)posc&quot;"
 				PreprocessorDefinitions="WIN32;_DEBUG;_CONSOLE;MD4_USE_UTF8"
 				MinimalRebuild="true"
 				BasicRuntimeChecks="3"
@@ -63,6 +63,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				LinkIncremental="2"
+				AdditionalLibraryDirectories="$(PROJECTS_ROOT_DIR)Lib\$(PlatformName)\$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				TargetMachine="1"
@@ -116,7 +117,7 @@
 				Name="VCCLCompilerTool"
 				Optimization="2"
 				EnableIntrinsicFunctions="true"
-				AdditionalIncludeDirectories="$(SolutionDir)..\md4c"
+				AdditionalIncludeDirectories="&quot;$(SolutionDir)..\md4c&quot;;&quot;$(PROJECTS_ROOT_DIR)posc&quot;"
 				PreprocessorDefinitions="WIN32;NDEBUG;_CONSOLE;MD4_USE_UTF8"
 				RuntimeLibrary="2"
 				EnableFunctionLevelLinking="true"
@@ -137,6 +138,7 @@
 			<Tool
 				Name="VCLinkerTool"
 				LinkIncremental="1"
+				AdditionalLibraryDirectories="$(PROJECTS_ROOT_DIR)Lib\$(PlatformName)\$(ConfigurationName)"
 				GenerateDebugInformation="true"
 				SubSystem="1"
 				OptimizeReferences="2"

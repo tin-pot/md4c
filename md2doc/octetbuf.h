@@ -3,13 +3,6 @@
 #ifndef OCTETBUF_H_INCLUDED
 #define OCTETBUF_H_INCLUDED 1
 
-#ifndef STDBOOL_H
-#define STDBOOL_H <stdbool.h>
-#endif
-#ifndef STDINT_H
-#define STDINT_H <stdint.h>
-#endif
-
 #include <stdbool.h>
 #include <stdint.h>
 #include <stddef.h>

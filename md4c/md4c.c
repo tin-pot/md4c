@@ -3734,6 +3734,9 @@ struct MD_BLOCK_tag {
      */
     unsigned data      : 16;
 
+    /* Leaf blocks:     Count of lines (MD_LINE or MD_VERBATIMLINE) on the block.
+     * MD_BLOCK_OL:     Start item number.
+     */
     unsigned n_lines;
 };
 
@@ -3955,24 +3958,38 @@ md_process_all_blocks(MD_CTX* ctx)
 
     while(byte_off < ctx->n_block_bytes) {
         MD_BLOCK* block = (MD_BLOCK*)((char*)ctx->block_bytes + byte_off);
-        MD_BLOCK_OL_DETAIL ol_det;
-        void* det = NULL;
+        union {
+            MD_BLOCK_UL_DETAIL ul;
+            MD_BLOCK_OL_DETAIL ol;
+        } det;
 
-        if(block->type == MD_BLOCK_OL) {
-            ol_det.start = block->n_lines;
-            det = &ol_det;
+        switch(block->type) {
+            case MD_BLOCK_UL:
+                det.ul.is_tight = (block->flags & MD_BLOCK_LOOSE_LIST) ? FALSE : TRUE;
+                det.ul.mark = (CHAR) block->data;
+                break;
+
+            case MD_BLOCK_OL:
+                det.ol.start = block->n_lines;
+                det.ol.is_tight =  (block->flags & MD_BLOCK_LOOSE_LIST) ? FALSE : TRUE;
+                det.ol.mark_delimiter = (CHAR) block->data;
+                break;
+
+            default:
+                /* noop */
+                break;
         }
 
         if(block->flags & MD_BLOCK_CONTAINER) {
             if(block->flags & MD_BLOCK_CONTAINER_CLOSER) {
-                MD_LEAVE_BLOCK(block->type, det);
+                MD_LEAVE_BLOCK(block->type, &det);
 
                 if(block->type == MD_BLOCK_UL || block->type == MD_BLOCK_OL || block->type == MD_BLOCK_QUOTE)
                     ctx->n_containers--;
             }
 
             if(block->flags & MD_BLOCK_CONTAINER_OPENER) {
-                MD_ENTER_BLOCK(block->type, det);
+                MD_ENTER_BLOCK(block->type, &det);
 
                 if(block->type == MD_BLOCK_UL || block->type == MD_BLOCK_OL) {
                     ctx->containers[ctx->n_containers].is_loose = (block->flags & MD_BLOCK_LOOSE_LIST);
@@ -4192,7 +4209,8 @@ md_add_line_into_current_block(MD_CTX* ctx, const MD_LINE_ANALYSIS* analysis)
 }
 
 static int
-md_push_container_bytes(MD_CTX* ctx, MD_BLOCKTYPE type, unsigned start, unsigned flags)
+md_push_container_bytes(MD_CTX* ctx, MD_BLOCKTYPE type, unsigned start,
+                        unsigned data, unsigned flags)
 {
     MD_BLOCK* block;
     int ret = 0;
@@ -4205,7 +4223,7 @@ md_push_container_bytes(MD_CTX* ctx, MD_BLOCKTYPE type, unsigned start, unsigned
 
     block->type = type;
     block->flags = flags;
-    block->data = 0;
+    block->data = data;
     block->n_lines = start;
 
 abort:
@@ -4664,7 +4682,7 @@ md_push_container(MD_CTX* ctx, const MD_CONTAINER* container)
 }
 
 static int
-md_enter_child_containers(MD_CTX* ctx, unsigned n_children)
+md_enter_child_containers(MD_CTX* ctx, unsigned n_children, unsigned data)
 {
     int i;
     int ret = 0;
@@ -4689,12 +4707,12 @@ md_enter_child_containers(MD_CTX* ctx, unsigned n_children)
 
                 MD_CHECK(md_push_container_bytes(ctx,
                                 (is_ordered_list ? MD_BLOCK_OL : MD_BLOCK_UL),
-                                c->start, MD_BLOCK_CONTAINER_OPENER));
-                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0, MD_BLOCK_CONTAINER_OPENER));
+                                c->start, data, MD_BLOCK_CONTAINER_OPENER));
+                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0, data, MD_BLOCK_CONTAINER_OPENER));
                 break;
 
             case _T('>'):
-                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_QUOTE, 0, MD_BLOCK_CONTAINER_OPENER));
+                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_QUOTE, 0, data, MD_BLOCK_CONTAINER_OPENER));
                 break;
 
             default:
@@ -4725,14 +4743,16 @@ md_leave_child_containers(MD_CTX* ctx, int n_keep)
             case _T('-'):
             case _T('+'):
             case _T('*'):
-                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0, MD_BLOCK_CONTAINER_CLOSER));
+                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0,
+                                0, MD_BLOCK_CONTAINER_CLOSER));
                 MD_CHECK(md_push_container_bytes(ctx,
                                 (is_ordered_list ? MD_BLOCK_OL : MD_BLOCK_UL), 0,
-                                MD_BLOCK_CONTAINER_CLOSER));
+                                c->ch, MD_BLOCK_CONTAINER_CLOSER));
                 break;
 
             case _T('>'):
-                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_QUOTE, 0, MD_BLOCK_CONTAINER_CLOSER));
+                MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_QUOTE, 0,
+                                0, MD_BLOCK_CONTAINER_CLOSER));
                 break;
 
             default:
@@ -5084,6 +5104,7 @@ redo:
             total_indent += line->indent;
 
             line->beg = off;
+            line->data = container.ch;
 
             /* Some of the following whitespace actually still belongs to the mark. */
             if(off >= ctx->size || ISNEWLINE(off)) {
@@ -5205,7 +5226,7 @@ done:
 
     *p_end = off;
 
-    /* If we belong to a list after seeing a blank line, the enclosing is loose. */
+    /* If we belong to a list after seeing a blank line, the list is loose. */
     if(prev_line_has_list_loosening_effect  &&  line->type != MD_LINE_BLANK  &&  n_parents + n_brothers > 0) {
         MD_CONTAINER* c = &ctx->containers[n_parents + n_brothers - 1];
         if(c->ch != _T('>')) {
@@ -5221,12 +5242,12 @@ done:
     /* Enter any container we found a mark for. */
     if(n_brothers > 0) {
         MD_ASSERT(n_brothers == 1);
-        MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0,
+        MD_CHECK(md_push_container_bytes(ctx, MD_BLOCK_LI, 0, 0,
                 MD_BLOCK_CONTAINER_CLOSER | MD_BLOCK_CONTAINER_OPENER));
     }
 
     if(n_children > 0)
-        MD_CHECK(md_enter_child_containers(ctx, n_children));
+        MD_CHECK(md_enter_child_containers(ctx, n_children, line->data));
 
 abort:
     return ret;

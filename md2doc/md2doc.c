@@ -2088,24 +2088,29 @@ static int cb_enter_block(MD_BLOCKTYPE type, void *detail, void *userData)
         break;
         
     case MD_BLOCK_UL:
-        /* TODO: Where's the 'tight (true|false)' attribute of CommonMark? */
-        DO_ATTR("type", "bullet", 6U);
-        DO_START(NODE_LIST);
-        break;
+        {
+            MD_BLOCK_OL_DETAIL *d = detail;
+
+            DO_ATTR("type", "bullet", 6U);
+            DO_ATTR("tight", d->is_tight ? "true" : "false", NTS);
+            DO_START(NODE_LIST);
+            break;
+        }
         
     case MD_BLOCK_OL:
-        /* TODO: Where's the 'tight (true|false)' attribute of CommonMark? */
-        /* TODO: Where's the 'delim (paren|period) attribute of CommonMark? */
         {
             MD_BLOCK_OL_DETAIL *d = detail;
             char num[16];
             
             sprintf(num, "%u", d->start);
             DO_ATTR("type", "ordered", 7U);
+            DO_ATTR("tight", d->is_tight ? "true" : "false", NTS);
+            DO_ATTR("delim",
+                    d->mark_delimiter == '.' ? "period" : "paren", NTS);
             DO_ATTR("start", num, NTS);
             DO_START(NODE_LIST);
+            break;
         }
-        break;
         
     case MD_BLOCK_LI:
         DO_START(NODE_LISTITEM);
